@@ -1,17 +1,13 @@
-import Control.Applicative
 import Control.Monad
 import Data.Char
+import Data.Functor
+import Data.Traversable
 import System.IO
-import Text.Parsec
-import Text.Parsec.String
-import Text.Parsec.Expr
-import Text.Parsec.Token
-import Text.Parsec.Language
 
-data Bond   = Single
-            | Double
-            | Triple
-            | Aromatic
+data Bond = Single
+          | Double
+          | Triple
+          | Aromatic
     deriving (Eq)
 
 instance Show Bond where
@@ -20,15 +16,38 @@ instance Show Bond where
   show Triple    = "#"
   show Aromatic  = ":"
 
-data Token  = TokBond Bond
-            | TokAtom String
+data Token  = TokAtom String
+            | TokBond Bond
             | TokBranch [Token]
     deriving (Eq)
 
 instance Show Token where
-  show (TokBond bond) = show bond
   show (TokAtom atom) = atom
+  show (TokBond bond) = show bond
   show (TokBranch tokens) = "( " ++ (concatTokenStrs $ fmap show tokens) ++ " )"
+
+data Molecule = Nil
+              | MolAtom String
+              | MolBond Bond
+              | MolList [Molecule]
+    deriving (Eq)
+
+instance Show Molecule where
+  show (MolAtom atom) = atom
+  show (MolBond bond) = show bond
+  show (MolList mols) = concatTokenStrs $ fmap show mols
+
+-- parser
+moleculeP :: [Token] -> Molecule
+moleculeP [] = Nil
+moleculeP [token] = tokenP token
+moleculeP tokens = MolList $ fmap tokenP tokens
+
+tokenP :: Token -> Molecule
+tokenP (TokAtom atom) = MolAtom atom
+tokenP (TokBond bond) = MolBond bond
+tokenP (TokBranch []) = Nil
+tokenP (TokBranch (x:xs)) = MolList $ tokenP x : fmap tokenP xs
 
 -- lexer
 tokenize :: String -> [Token]
@@ -68,7 +87,9 @@ concatTokenStrs = unwords
 isBond :: Char -> Bool
 isBond = (`elem` "-=#:")
 
+interactish :: (String -> String) -> IO ()
+interactish f = getLine >>= (putStrLn . f)
+
 main :: IO ()
 main = do
-  smiles <- getLine
-  putStrLn $ concatTokenStrs $ fmap show $ tokenize smiles
+  forever $ interactish $ show . moleculeP . tokenize
